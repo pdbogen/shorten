@@ -157,6 +157,52 @@ func Mint(db *bolt.DB) func(rw http.ResponseWriter, req *http.Request) {
 	}
 }
 
+func Expirer(db *bolt.DB) {
+	for {
+		err := db.Update(func(tx *bolt.Tx) error {
+			keyBucket := tx.Bucket([]byte("keys"))
+			if keyBucket == nil {
+				return nil
+			}
+
+			keyDeletes := [][]byte{}
+			urlDeletes := [][]byte{}
+			keyBucket.ForEach(func(k, v []byte) error {
+				keyObj := &Key{}
+				err := json.Unmarshal(v, keyObj)
+				if err != nil || keyObj.Expiry.Before(time.Now()) {
+					if err != nil {
+						log.Printf("bad json %q: %s", k, err)
+					}
+					keyDeletes = append(keyDeletes, k)
+					urlDeletes = append(urlDeletes, []byte(keyObj.Url))
+				}
+				return nil
+			})
+			for _, k := range keyDeletes {
+				keyBucket.Delete(k)
+			}
+
+			if len(keyDeletes) > 0 {
+				log.Printf("expired %d keys", len(keyDeletes))
+			}
+
+			urlBucket := tx.Bucket([]byte("urls"))
+			if urlBucket != nil {
+				for _, u := range urlDeletes {
+					urlBucket.Delete(u)
+				}
+			}
+
+			return nil
+		})
+		if err != nil {
+			log.Printf("consuming error during expirer: %s", err)
+		}
+		time.Sleep(time.Minute)
+	}
+}
+
 func main() {
 	secret := flag.String("secret", "", "the shared secret used to authenticate creation requests; randomly generated each run if left off.")
 	port := flag.Int("port", 80, "port to listen on")
@@ -175,6 +221,8 @@ func main() {
 
 	http.HandleFunc("/", Serve(dbObj))
 	http.HandleFunc("/mint", withAuth(*secret, Mint(dbObj)))
+
+	go Expirer(dbObj)
 
 	log.Printf("Listening on :%d", *port)
 	log.Print(http.ListenAndServe(fmt.Sprintf(":%d", *port), nil))
