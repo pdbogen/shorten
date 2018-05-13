@@ -1,5 +1,8 @@
 IMAGE_URL ?= 248174752766.dkr.ecr.us-west-1.amazonaws.com/shorten
 
+restart: .docker
+	ssh core@mapbot.cernu.us sudo systemctl restart shorten
+
 docker: .docker
 
 .docker: Dockerfile shorten
