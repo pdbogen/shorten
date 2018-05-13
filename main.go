@@ -2,7 +2,6 @@ package main
 
 import (
 	"flag"
-	"github.com/pdbogen/mapbot/common/rand"
 	"net/http"
 	"fmt"
 	"log"
@@ -11,6 +10,8 @@ import (
 	"github.com/coreos/bbolt"
 	"os"
 	"encoding/json"
+	"math/rand"
+	"strconv"
 )
 
 func httpLog(status int, req *http.Request) {
@@ -104,7 +105,7 @@ func Mint(db *bolt.DB) func(rw http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		key := []byte(rand.RandHex(32))
+		key := []byte(strconv.FormatInt(rand.Int63(), 36))
 		err := db.Update(func(tx *bolt.Tx) error {
 			urlBucket, err := tx.CreateBucketIfNotExists([]byte("urls"))
 			if err != nil {
@@ -203,14 +204,29 @@ func Expirer(db *bolt.DB) {
 	}
 }
 
+func RandHex(bytes uint) string {
+	data := make([]byte, bytes)
+	n, err := rand.Read(data)
+	if err != nil {
+		panic(fmt.Sprintf("could not get random bytes: %s", err))
+	}
+	if uint(n) != bytes {
+		panic("could not get enough random bytes")
+	}
+
+	return fmt.Sprintf("%02x", data)
+}
+
 func main() {
+	rand.Seed(time.Now().UnixNano())
+
 	secret := flag.String("secret", "", "the shared secret used to authenticate creation requests; randomly generated each run if left off.")
 	port := flag.Int("port", 80, "port to listen on")
 	db := flag.String("db", "shorten.db", "path to the boltdb")
 	flag.Parse()
 
 	if *secret == "" {
-		*secret = rand.RandHex(32)
+		*secret = RandHex(16)
 		log.Printf("random key for this session is: %q", *secret)
 	}
 
