@@ -1,17 +1,17 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
-	"net/http"
 	"fmt"
+	"github.com/coreos/bbolt"
 	"log"
+	"math/rand"
+	"net/http"
+	"os"
+	"strconv"
 	"strings"
 	"time"
-	"github.com/coreos/bbolt"
-	"os"
-	"encoding/json"
-	"math/rand"
-	"strconv"
 )
 
 func httpLog(status int, req *http.Request) {
