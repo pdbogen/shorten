@@ -2,3 +2,5 @@
 /shorten
 /shorten.db
 /.idea
+/vendor/*
+!vendor.json
