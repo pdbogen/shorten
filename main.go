@@ -150,10 +150,13 @@ func Mint(db *bolt.DB) func(rw http.ResponseWriter, req *http.Request) {
 			log.Printf("error updating DB: %s", err)
 			httpLog(http.StatusInternalServerError, req)
 			http.Error(rw, "internal server error", http.StatusInternalServerError)
+			return
 		}
 
 		rw.WriteHeader(http.StatusOK)
-		fmt.Fprint(rw, string(key))
+		if _, err := fmt.Fprint(rw, string(key)); err != nil {
+			log.Printf("error writing key to socket: %s (too late to report to requester)", err)
+		}
 		return
 	}
 }
@@ -166,9 +169,9 @@ func Expirer(db *bolt.DB) {
 				return nil
 			}
 
-			keyDeletes := [][]byte{}
-			urlDeletes := [][]byte{}
-			keyBucket.ForEach(func(k, v []byte) error {
+			var keyDeletes [][]byte
+			var urlDeletes [][]byte
+			err := keyBucket.ForEach(func(k, v []byte) error {
 				keyObj := &Key{}
 				err := json.Unmarshal(v, keyObj)
 				if err != nil || keyObj.Expiry.Before(time.Now()) {
@@ -180,8 +183,13 @@ func Expirer(db *bolt.DB) {
 				}
 				return nil
 			})
+			if err != nil {
+				log.Printf("error iterating keys during expiration: %s", err)
+			}
 			for _, k := range keyDeletes {
-				keyBucket.Delete(k)
+				if err := keyBucket.Delete(k); err != nil {
+					log.Printf("error deleting key %q: %s", string(k), err)
+				}
 			}
 
 			if len(keyDeletes) > 0 {
@@ -191,7 +199,9 @@ func Expirer(db *bolt.DB) {
 			urlBucket := tx.Bucket([]byte("urls"))
 			if urlBucket != nil {
 				for _, u := range urlDeletes {
-					urlBucket.Delete(u)
+					if err := urlBucket.Delete(u); err != nil {
+						log.Printf("error deleting url %q: %s", string(u), err)
+					}
 				}
 			}
 
